@@ -1,0 +1,63 @@
+########################################################
+###       Execution5 strategy config               ###
+########################################################
+
+template_version: 5
+strategy: null
+# The following configuations are only required for the
+# Levels Maker strategy
+
+# Exchange and token parameters
+market: null
+market_trading_pair_tuple: null
+
+# Type of Order (Limit/Market)
+order_type: null
+
+# Size of the Order
+order_amount: null
+
+# Price of Order (in case of Limit Order)
+order_price: null
+
+# Time in seconds before cancelling the limit order
+# If cancel_order wait time is 60 and the order is still open after 60 seconds since placing the order,
+# it will cancel the limit order.
+cancel_order_wait_time: null
+
+# Indicate VWAP or TWAP
+is_vwap: null
+
+# How many orders to place
+num_individual_orders: null
+
+# Percent slippage 
+percent_slippage: null
+
+# Percent of order to allow the specified percent slippage
+order_percent_of_volume: null
+
+# How long to between placing incremental orders
+time_delay: null
+
+# Specify buy/sell. Set to True for Buy and False for Sell
+is_buy: null
+
+# Specify the starting stop loss at any new order.
+max_stop_loss: null
+
+# States what is the profit where a position is liquidable
+take_profit: null
+
+# Low band from where the bot operates
+ level_01: null
+
+# Middle band from where the Fibonacci levels pivtos
+ level_02: null
+
+# Top band from where the bot stops
+ level_03: null
+
+
+# For more detailed information, see:
+# https://docs.hummingbot.io/strategies/simple-trade/#configuration-parameters
