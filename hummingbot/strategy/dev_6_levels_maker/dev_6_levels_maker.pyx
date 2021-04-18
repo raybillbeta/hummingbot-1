@@ -18,6 +18,7 @@ from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.connector.exchange_base cimport ExchangeBase
 from hummingbot.core.event.events import OrderType
+from hummingbot.core.event.events import PriceType
 
 from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
 from hummingbot.strategy.strategy_base import StrategyBase
@@ -53,7 +54,11 @@ cdef class LevelsMakerStrategy(StrategyBase):
                  is_buy: bool = True,
                  order_amount: Decimal = Decimal(1),
                  logging_options: int = OPTION_LOG_ALL,
-                 status_report_interval: float = 900):
+                 status_report_interval: float = 900,
+                 # levels: list = [],
+                 level_01: Decimal = Decimal("1.0"),
+                 level_02: Decimal = Decimal("1.0"),
+                 level_03: Decimal = Decimal("1.0")):
 
         if len(market_infos) < 1:
             raise ValueError(f"market_infos must not be empty.")
@@ -71,6 +76,12 @@ cdef class LevelsMakerStrategy(StrategyBase):
         self._is_buy = is_buy
         self._order_amount = Decimal(order_amount)
         self._order_price = s_decimal_NaN if order_price is None else Decimal(order_price)
+        self._level_01 = level_01
+        self._level_02 = level_02
+        self._level_03 = level_03
+        self._active_level = 0,
+        self._open_position = False,
+        self._levels = []
 
         cdef:
             set all_markets = set([market_info.market for market_info in market_infos])
@@ -109,6 +120,7 @@ cdef class LevelsMakerStrategy(StrategyBase):
     def place_orders(self):
         return self._place_orders
 
+    @property
     def format_status(self) -> str:
         cdef:
             list lines = []
@@ -122,11 +134,9 @@ cdef class LevelsMakerStrategy(StrategyBase):
             warning_lines.extend(self.network_warning([market_info]))
 
             markets_df = self.market_status_data_frame([market_info])
-            markets_df = markets_df.drop(columns=["Adjusted Bid", "Adjusted Ask"])
             lines.extend(["", "  Markets:"] + ["    " + line for line in str(markets_df).split("\n")])
 
             assets_df = self.wallet_balance_data_frame([market_info])
-            assets_df = assets_df.drop(columns=["Conversion Rate"])
             lines.extend(["", "  Assets:"] + ["    " + line for line in str(assets_df).split("\n")])
 
             # See if there're any open orders.
@@ -149,12 +159,16 @@ cdef class LevelsMakerStrategy(StrategyBase):
         # Calculate secondary levels and insert
         # Select active level
         StrategyBase.c_start(self, clock, timestamp)
+        # Calculate Levels
+        self.c_fibonacci_retracement_levels()
 
     cdef c_tick(self, double timestamp):
         StrategyBase.c_tick(self, timestamp)
         cdef:
             bint should_report_warnings = self._logging_options & self.OPTION_LOG_STATUS_REPORT
             list active_maker_orders = self.active_limit_orders
+            object market_info
+            object price
 
         try:
             # If under firs level, doing nothing, Select active level.
@@ -167,76 +181,112 @@ cdef class LevelsMakerStrategy(StrategyBase):
             # if expired order, sell market cancel orders, update active_level.
             # if price over level 3 wait to expire an sell. stop bot.
             # if down trend stop bot.
+            # self._all_markets_ready = all([market.ready for market in self._sb_markets])
+            # if self._all_markets_ready:123456
+            # price = market_info.get_price_for_volume(True, self._order_amount).result_price
+            # if levels[0]>=price:
 
+            self.logger().warning(f"Ticker Price")
             if not self._all_markets_ready:
-                self._all_markets_ready = all([market.ready for market in self._sb_markets])
-                if not self._all_markets_ready:
-                    # Markets not ready yet. Don't do anything.
-                    if should_report_warnings:
-                        self.logger().warning(f"Markets are not ready. No market making trades are permitted.")
-                    return
+                self.logger().warning(f"All markets ready")
+                for market_info in self._market_infos.values():
+                    self.logger().warning(f"Pair "f"{market_info.trading_pair}")
+                    self.logger().warning(f"PRE")
 
-            if should_report_warnings:
-                if not all([market.network_status is NetworkStatus.CONNECTED for market in self._sb_markets]):
-                    self.logger().warning(f"WARNING: Some markets are not connected or are down at the moment. Market "
-                                          f"making may be dangerous when markets or networks are unstable.")
+                    # price = market_info.market.c_get_price(True, self._is_buy)
+                    price = market_info.get_price_for_volume(True, self._order_amount).result_price
+                    self.logger().warning(f"POST")
+                    self.logger().warning(f"Current Price: " f"{price}")
+                    price = market_info.market.get_price_by_type(market_info.trading_pair, PriceType.MidPrice)
+                    self.logger().warning(f"BestBid: " f"{price}")
+                    self.logger().warning(f"Fibonnaci Retracement Levels" f"{self._levels}")
 
-            for market_info in self._market_infos.values():
-                self.c_process_market(market_info)
+            # self.logger().warning(f"Level 1: "
+            #                    f"({self._level_01}")
+
+            # if not self._all_markets_ready:
+            #     self._all_markets_ready = all([market.ready for market in self._sb_markets])
+            #     if not self._all_markets_ready:
+            #         # Markets not ready yet. Don't do anything.
+            #         if should_report_warnings:
+            #             self.logger().warning(f"Markets are not ready. No market making trades are permitted.")
+            #         return
+            #
+            # if should_report_warnings:
+            #     if not all([market.network_status is NetworkStatus.CONNECTED for market in self._sb_markets]):
+            #         self.logger().warning(f"WARNING: Some markets are not connected or are down at the moment. Market "
+            #                               f"making may be dangerous when markets or networks are unstable.")
+            #
+            # for market_info in self._market_infos.values():
+            #     self.c_process_market(market_info)
+            return
         finally:
             return
 
-    cdef c_place_order(self, object market_info):
+    # cdef c_place_order(self, object market_info):
+    #     cdef:
+    #         ExchangeBase market = market_info.market
+    #         object quantized_amount = market.c_quantize_order_amount(market_info.trading_pair, self._order_amount)
+    #         object quantized_price
+    #
+    #     self.logger().info(f"Checking to see if the user has enough balance to place orders")
+    #
+    #     if self.c_has_enough_balance(market_info):
+    #         if self._order_type == "market":
+    #             if self._is_buy:
+    #                 order_id = self.c_buy_with_specific_market(market_info,
+    #                                                            amount=quantized_amount)
+    #                 self.logger().info("Market buy order has been executed")
+    #             else:
+    #                 order_id = self.c_sell_with_specific_market(market_info,
+    #                                                             amount=quantized_amount)
+    #                 self.logger().info("Market sell order has been executed")
+    #         else:
+    #             quantized_price = market.c_quantize_order_price(market_info.trading_pair, self._order_price)
+    #             if self._is_buy:
+    #                 order_id = self.c_buy_with_specific_market(market_info,
+    #                                                            amount=quantized_amount,
+    #                                                            order_type=OrderType.LIMIT,
+    #                                                            price=quantized_price)
+    #                 self.logger().info("Limit buy order has been placed")
+    #
+    #             else:
+    #                 order_id = self.c_sell_with_specific_market(market_info,
+    #                                                             amount=quantized_amount,
+    #                                                             order_type=OrderType.LIMIT,
+    #                                                             price=quantized_price)
+    #                 self.logger().info("Limit sell order has been placed")
+    #
+    #     else:
+    #         self.logger().info(f"Not enough balance to run the strategy. Please check balances and try again.")
+    #
+    # cdef c_has_enough_balance(self, object market_info):
+    #     cdef:
+    #         ExchangeBase market = market_info.market
+    #         object base_asset_balance = market.c_get_balance(market_info.base_asset)
+    #         object quote_asset_balance = market.c_get_balance(market_info.quote_asset)
+    #         OrderBook order_book = market_info.order_book
+    #         object price = market_info.get_price_for_volume(True, self._order_amount).result_price
+    #
+    #     return quote_asset_balance >= self._order_amount * price if self._is_buy else base_asset_balance >= self._order_amount
+    #
+    # cdef c_process_market(self, object market_info):
+    #     cdef:
+    #         ExchangeBase maker_market = market_info.market
+    #
+    #     if self._place_orders:
+    #         self._place_orders = False
+    #         self.c_place_order(market_info)
+
+    cdef c_fibonacci_retracement_levels(self):
         cdef:
-            ExchangeBase market = market_info.market
-            object quantized_amount = market.c_quantize_order_amount(market_info.trading_pair, self._order_amount)
-            object quantized_price
-
-        self.logger().info(f"Checking to see if the user has enough balance to place orders")
-
-        if self.c_has_enough_balance(market_info):
-            if self._order_type == "market":
-                if self._is_buy:
-                    order_id = self.c_buy_with_specific_market(market_info,
-                                                               amount=quantized_amount)
-                    self.logger().info("Market buy order has been executed")
-                else:
-                    order_id = self.c_sell_with_specific_market(market_info,
-                                                                amount=quantized_amount)
-                    self.logger().info("Market sell order has been executed")
-            else:
-                quantized_price = market.c_quantize_order_price(market_info.trading_pair, self._order_price)
-                if self._is_buy:
-                    order_id = self.c_buy_with_specific_market(market_info,
-                                                               amount=quantized_amount,
-                                                               order_type=OrderType.LIMIT,
-                                                               price=quantized_price)
-                    self.logger().info("Limit buy order has been placed")
-
-                else:
-                    order_id = self.c_sell_with_specific_market(market_info,
-                                                                amount=quantized_amount,
-                                                                order_type=OrderType.LIMIT,
-                                                                price=quantized_price)
-                    self.logger().info("Limit sell order has been placed")
-
-        else:
-            self.logger().info(f"Not enough balance to run the strategy. Please check balances and try again.")
-
-    cdef c_has_enough_balance(self, object market_info):
-        cdef:
-            ExchangeBase market = market_info.market
-            object base_asset_balance = market.c_get_balance(market_info.base_asset)
-            object quote_asset_balance = market.c_get_balance(market_info.quote_asset)
-            OrderBook order_book = market_info.order_book
-            object price = market_info.get_price_for_volume(True, self._order_amount).result_price
-
-        return quote_asset_balance >= self._order_amount * price if self._is_buy else base_asset_balance >= self._order_amount
-
-    cdef c_process_market(self, object market_info):
-        cdef:
-            ExchangeBase maker_market = market_info.market
-
-        if self._place_orders:
-            self._place_orders = False
-            self.c_place_order(market_info)
+            ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
+            ratios.reverse()
+            # colors = ["black", "r", "g", "b", "cyan", "magenta", "yellow"]
+            max_level = self._level_03
+            min_level = self._level_01
+        for ratio in ratios:
+            if max_level > min_level:  # Uptrend
+                self._levels.append(max_level - (max_level - min_level) * ratio)
+            else:  # Downtrend
+                self._levels.append(min_level + (max_level - min_level) * ratio)
