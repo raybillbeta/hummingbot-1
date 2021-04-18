@@ -41,10 +41,12 @@ dev_6_levels_maker_config_map = {
         ConfigVar(key="market",
                   prompt="Enter the name of the exchange >>> ",
                   validator=validate_exchange,
+                  default="binance",
                   on_validated=lambda value: required_exchanges.append(value)),
     "market_trading_pair_tuple":
         ConfigVar(key="market_trading_pair_tuple",
                   prompt=trading_pair_prompt,
+                  default="ETH-BTC",
                   validator=validate_market_trading_pair_tuple),
     "order_type":
         ConfigVar(key="order_type",
@@ -61,7 +63,7 @@ dev_6_levels_maker_config_map = {
         ConfigVar(key="order_amount",
                   prompt="What is your preferred quantity per order in % of your balance "
                          "(denominated in the base asset, default is 3%) ? >>> ",
-                  default=3.0,
+                  default=1.0,
                   type_str="decimal"),
     "max_stop_loss":
         ConfigVar(key="max_stop_loss",
@@ -80,22 +82,26 @@ dev_6_levels_maker_config_map = {
                   prompt="What is the price of the limit order ? >>> ",
                   required_if=lambda: dev_6_levels_maker_config_map.get("order_type").value == "limit",
                   type_str="decimal"),
+    # If a value has a default value is not mandatory promted.
     "level_01":
         ConfigVar(key="level_01",
                   prompt="Intro level 1 of your band ? >>> ",
                   validator=lambda v: validate_decimal(v, Decimal(0), inclusive=False),
                   # required_if=lambda: dev_6_levels_maker_config_map.get("order_type").value == "limit",
+                  default= 1.4,
                   type_str="decimal"),
     "level_02":
         ConfigVar(key="level_02",
                   prompt="Intro level 2 of your band ? >>> ",
                   validator=lambda v: validate_decimal(v, Decimal(0), inclusive=False),
                   # required_if=lambda: dev_6_levels_maker_config_map.get("order_type").value == "limit",
+                  default=3.0,
                   type_str="decimal"),
     "level_03":
         ConfigVar(key="level_03",
                   prompt="Intro level 3 Top of your band ? >>> ",
                   validator=lambda v: validate_decimal(v, Decimal(0), inclusive=False),
                   # required_if=lambda: dev_6_levels_maker_config_map.get("order_type").value == "limit",
+                  default=3.0,
                   type_str="decimal")
 }
