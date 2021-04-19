@@ -281,12 +281,19 @@ cdef class LevelsMakerStrategy(StrategyBase):
     cdef c_fibonacci_retracement_levels(self):
         cdef:
             ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
-            ratios.reverse()
+
             # colors = ["black", "r", "g", "b", "cyan", "magenta", "yellow"]
             max_level = self._level_03
             min_level = self._level_01
+        ratios.reverse()
         for ratio in ratios:
             if max_level > min_level:  # Uptrend
                 self._levels.append(max_level - (max_level - min_level) * ratio)
             else:  # Downtrend
                 self._levels.append(min_level + (max_level - min_level) * ratio)
+
+    cdef c_set_current_level(self, object price):
+        cdef:
+            band = 0
+        band = next(x for x, val in enumerate(self._levels) if val >= price)
+        self._active_level = band if self._active_level != band else self._active_level

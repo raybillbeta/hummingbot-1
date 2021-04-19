@@ -29,3 +29,4 @@ cdef class LevelsMakerStrategy(StrategyBase):
     # cdef c_place_order(self, object market_info)
     # cdef c_has_enough_balance(self, object market_info)
     cdef c_fibonacci_retracement_levels(self)
+    cdef c_set_current_level(self, object price)
