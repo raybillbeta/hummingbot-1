@@ -200,7 +200,8 @@ cdef class LevelsMakerStrategy(StrategyBase):
                     price = market_info.market.get_price_by_type(market_info.trading_pair, PriceType.MidPrice)
                     self.logger().warning(f"BestBid: " f"{price}")
                     self.logger().warning(f"Fibonnaci Retracement Levels" f"{self._levels}")
-
+                    self.c_set_current_level(price)
+                    self.logger().warning(f"Current Level" f"{self._active_level}")
             # self.logger().warning(f"Level 1: "
             #                    f"({self._level_01}")
 
