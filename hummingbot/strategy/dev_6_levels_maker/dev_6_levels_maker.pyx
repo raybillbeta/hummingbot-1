@@ -39,6 +39,7 @@ cdef class LevelsMakerStrategy(StrategyBase):
     OPTION_LOG_MAKER_ORDER_HEDGED = 1 << 6
     OPTION_LOG_ALL = 0x7fffffffffffffff
     CANCEL_EXPIRY_DURATION = 60.0
+    BASE_LEVEL = 0
 
     @classmethod
     def logger(cls) -> HummingbotLogger:
@@ -154,7 +155,6 @@ cdef class LevelsMakerStrategy(StrategyBase):
             lines.extend(["", "*** WARNINGS ***"] + warning_lines)
 
         return "\n".join(lines)
-
     cdef c_start(self, Clock clock, double timestamp):
         # Calculate secondary levels and insert
         # Select active level
@@ -186,22 +186,22 @@ cdef class LevelsMakerStrategy(StrategyBase):
             # price = market_info.get_price_for_volume(True, self._order_amount).result_price
             # if levels[0]>=price:
 
-            self.logger().warning(f"Ticker Price")
             if not self._all_markets_ready:
-                self.logger().warning(f"All markets ready")
                 for market_info in self._market_infos.values():
                     self.logger().warning(f"Pair "f"{market_info.trading_pair}")
-                    self.logger().warning(f"PRE")
+                    price = market_info.market.get_price_by_type(market_info.trading_pair, PriceType.MidPrice)
+                    self.c_set_current_level(price)
+                    self.c_first_situation(price)
 
                     # price = market_info.market.c_get_price(True, self._is_buy)
                     price = market_info.get_price_for_volume(True, self._order_amount).result_price
-                    self.logger().warning(f"POST")
-                    self.logger().warning(f"Current Price: " f"{price}")
-                    price = market_info.market.get_price_by_type(market_info.trading_pair, PriceType.MidPrice)
-                    self.logger().warning(f"BestBid: " f"{price}")
-                    self.logger().warning(f"Fibonnaci Retracement Levels" f"{self._levels}")
-                    self.c_set_current_level(price)
-                    self.logger().warning(f"Current Level" f"{self._active_level}")
+                    # self.logger().warning(f"POST")
+                    # self.logger().warning(f"Current Price: " f"{price}")
+                    # price = market_info.market.get_price_by_type(market_info.trading_pair, PriceType.MidPrice)
+                    # self.logger().warning(f"BestBid: " f"{price}")
+                    # self.logger().warning(f"Fibonnaci Retracement Levels" f"{self._levels}")
+                    # self.c_set_current_level(price)
+                    # self.logger().warning(f"Current Level:" f" {self._active_level}")
             # self.logger().warning(f"Level 1: "
             #                    f"({self._level_01}")
 
@@ -296,6 +296,40 @@ cdef class LevelsMakerStrategy(StrategyBase):
     cdef c_set_current_level(self, object price):
         cdef:
             band = 0
+        self.logger().warning(f"Set current level:" f" {price}")
         band = next(x for x, val in enumerate(self._levels) if val >= float(price))
         if self._active_level != band:
             self._active_level = band
+            self.logger().warning(f"Band:" f" {band}")
+
+    cdef c_first_situation(self, object price):
+        self.logger().warning(f"First situation" f" {price}")
+        if (not self._open_position) & (float(price) > float(self._levels[self._active_level])):
+            self.logger().warning(f"Place limit order" f"{price}")
+            # place limit order
+            # place market order -0.05
+            self.logger().warning(f"Place Market order" f"{price}")
+            self._open_position = True
+        elif self._open_position:
+            self.logger().warning(f"Open position" f"{price}")
+        else:
+            self.logger().warning(f"No order" f"{price}")
+
+    cdef c_intermediate_situation(self, object price):
+        # Update stop-loss
+        # take_profit
+        # close position - caducity
+        if not self._open_position:
+            self._open_position = True
+
+    cdef c_take_profit(self, object price):
+
+        if self._open_position:
+            self._open_position = False
+
+    cdef c_expire_position(self, object price):
+        if self._open_position:
+            self._open_position = False
+
+    def is_base_level(self) -> bint:
+        return (self._active_level == self.BASE_LEVEL)
