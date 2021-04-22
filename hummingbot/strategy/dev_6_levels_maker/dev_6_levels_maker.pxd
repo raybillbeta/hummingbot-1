@@ -19,7 +19,7 @@ cdef class LevelsMakerStrategy(StrategyBase):
         object _level_01
         object _level_02
         object _level_03
-        bint _active_level
+        object _active_level
         dict _tracked_orders
         dict _order_id_to_market_info
 
@@ -30,3 +30,7 @@ cdef class LevelsMakerStrategy(StrategyBase):
     # cdef c_has_enough_balance(self, object market_info)
     cdef c_fibonacci_retracement_levels(self)
     cdef c_set_current_level(self, object price)
+    cdef c_first_situation(self, object price)
+    cdef c_intermediate_situation(self, object price)
+    cdef c_take_profit(self, object price)
+    cdef c_expire_position(self, object price)
